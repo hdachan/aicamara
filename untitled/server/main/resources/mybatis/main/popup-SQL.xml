@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<!--
+	작성자 : 이세현
+	작성일 : 2023.11.26
+	내용 :  팝업 관련 SQL 입니다.
+ -->
+<mapper namespace="kr.co.takensoft.aiCamera.popup.dao.PopupDAO">
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 팝업 등록 SQL
+    -->
+    <insert id="popupInsert" parameterType="HashMap">
+        INSERT INTO popup_info(
+            post_id
+            , start_dt
+            , end_dt
+            , popup_title
+            , use_yn
+            , notice_yn
+            , reg_dt
+            , file_id
+        <if test="shortcuts_url != null">
+            ,shortcuts_yn
+            ,shortcuts_url
+        </if>
+            ,rgtr_id
+        )VALUES (
+            #{post_id}
+            , #{start_dt}
+            , #{end_dt}
+            , #{popup_title}
+            , 'Y'
+            , #{notice_yn}
+            , CURRENT_TIMESTAMP
+            , #{file_id}
+        <if test="shortcuts_url != null">
+            , 'Y'
+            , #{shortcuts_url}
+        </if>
+            , #{rgtr_id})
+    </insert>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 팝업 목록 SQL
+    -->
+    <select id="adminPopupSelectList" parameterType="HashMap" resultType="HashMap">
+        SELECT
+            post_id
+            , start_dt
+            , end_dt
+            , popup_title
+            , reg_dt
+            , file_id
+            , shortcuts_yn
+            , shortcuts_url
+            , rgtr_id
+            , notice_yn
+        FROM
+            popup_info
+        WHERE
+            use_yn = 'Y'
+        <if test="searchType != null and searchType != '' and searchText != null and searchText != ''">
+            <choose>
+                <when test="searchType == 'all'">
+                    AND
+                        (popup_title LIKE CONCAT('%', #{searchText}, '%')
+                    OR
+                        rgtr_id LIKE CONCAT('%', #{searchText}, '%'))
+                </when>
+                <when test="searchType == 'title'">
+                    AND popup_title LIKE CONCAT('%', #{searchText}, '%')
+                </when>
+                <when test="searchType == 'writer'">
+                    AND rgtr_id LIKE CONCAT('%', #{searchText}, '%')
+                </when>
+            </choose>
+        </if>
+        <choose>
+            <when test="sort == 'desc'">
+                ORDER BY reg_dt DESC
+            </when>
+            <when test="sort == 'asc'">
+                ORDER BY reg_dt ASC
+            </when>
+        </choose>
+        OFFSET #{pagingRowIndex} LIMIT 10
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 팝업 목록 COUNT SQL
+    -->
+    <select id="adminPopupSelectListCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*)
+        FROM
+            popup_info
+        WHERE
+            use_yn = 'Y'
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 팝업게시물 상세조회  SQL
+    -->
+    <select id="popupSelectOne" parameterType="HashMap" resultType="HashMap">
+        SELECT
+            post_id
+            , start_dt
+            , end_dt
+            , popup_title
+            , reg_dt
+            , mdfcn_dt
+            , use_yn
+            , file_id
+            , shortcuts_yn
+            , shortcuts_url
+            , rgtr_id
+            , mdfr_id
+            , notice_yn
+        FROM
+            popup_info
+        WHERE
+            post_id = #{post_id}
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 상세조회 이전글 SQL
+    -->
+    <select id="findPrevPopup" parameterType="HashMap" resultType="HashMap">
+      <![CDATA[
+        SELECT * FROM popup_info
+        WHERE CAST(SUBSTRING(post_id, 7) AS INTEGER) = (
+            SELECT MAX(CAST(SUBSTRING(post_id, 7) AS INTEGER))
+            FROM popup_info
+            WHERE CAST(SUBSTRING(post_id, 7) AS INTEGER) < CAST(SUBSTRING(#{post_id}, 7) AS INTEGER)
+            AND use_yn = 'Y')
+        LIMIT 1
+      ]]>
+    </select>
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 관리자 상세조회 다음글 SQL
+    -->
+    <select id="findNextPopup" parameterType="HashMap" resultType="HashMap">
+        SELECT * FROM popup_info
+        WHERE CAST(SUBSTRING(post_id, 7) AS INTEGER) = (
+            SELECT MIN(CAST(SUBSTRING(post_id, 7) AS INTEGER))
+            FROM popup_info
+            WHERE CAST(SUBSTRING(post_id, 7) AS INTEGER) > CAST(SUBSTRING(#{post_id}, 7) AS INTEGER)
+            AND use_yn = 'Y')
+        LIMIT 1
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 사용자 팝업 목록 SQL
+    -->
+    <select id="userPopupList" resultType="HashMap">
+        SELECT
+            p.post_id
+            , p.start_dt
+            , p.end_dt
+            , p.popup_title
+            , p.reg_dt
+            , p.file_id
+            , p.shortcuts_yn
+            , p.shortcuts_url
+            , p.rgtr_id
+            , p.notice_yn
+            , f.file_path
+            , f.file_nm
+            , f.real_file_nm
+            , f.file_extn_nm
+            , f.file_size
+            , f.file_sn
+            , f.file_ty
+        FROM
+            popup_info p
+        JOIN
+            file f ON p.file_id = f.file_id
+        WHERE
+            p.use_yn = 'Y'
+        AND
+            f.use_yn = 'Y'
+        AND
+            CURRENT_DATE BETWEEN p.start_dt AND p.end_dt
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 팝업 게시물 수정 SQL
+    -->
+    <update id="popupUpdate" parameterType="HashMap">
+        UPDATE
+            popup_info
+        SET
+            popup_title = #{popup_title}
+            , start_dt = #{start_dt}
+            , end_dt = #{end_dt}
+            , notice_yn = #{notice_yn}
+        <if test="shortcuts_url != null">
+            , shortcuts_yn = 'Y'
+            , shortcuts_url = #{shortcuts_url}
+        </if>
+            , mdfcn_dt = CURRENT_TIMESTAMP
+            , file_id = #{file_id}
+            , mdfr_id = #{mdfr_id}
+        WHERE
+            post_id= #{post_id}
+    </update>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.11.20
+        내용 : 팝업 게시물 삭제 SQL
+    -->
+    <update id="popupDelete" parameterType="HashMap">
+        UPDATE
+            popup_info
+        SET
+            use_yn = 'N'
+        WHERE
+            post_id = #{post_id}
+    </update>
+
+
+
+
+</mapper>

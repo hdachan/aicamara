@@ -1,0 +1,637 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<!--
+	작성자 : 이세현
+	작성일 : 2024.01.15
+	내용 : 현장 데이터 관련 SQL 입니다.
+ -->
+<mapper namespace="kr.co.takensoft.aiCamera.data.dao.DataDAO">
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.16
+        내용 : 현장 - 현황정보 등록 SQL (10초마다 조회할 현황정보 INSERT)
+     -->
+	<insert id="statusInformation" parameterType="HashMap">
+			INSERT INTO spt_eqpmn_data(
+		  		eqpmn_id--장비아이디
+				, clct_dt--현재시간(수집일시)
+				, cpu_use_amount--cpu 사용량
+				, memory_use_amount--메모리 사용량
+				, eqpmn_trobl_yn--장치장애발생 여부
+          	)
+			VALUES (
+				#{eqpmn_id}
+				, #{timestamp} :: timestamp
+				, #{cpu_usage}
+				, #{get_mem_usage}
+				, #{eqpmn_trobl_yn}
+        	)
+	</insert>
+
+	<!--
+        작성자 : 이세현
+        작성일 : 2024.01.15
+        내용 : 현장 - 객체인식 이벤트 발생 SQL
+     -->
+	<insert id="ObjectDetectEventInsert" parameterType="HashMap">
+        INSERT INTO object_detect_event (
+	        eqpmn_id,
+	        person_cnt,
+	        bicycle_cnt,
+	        car_cnt,
+	        motorcycle_cnt,
+	        bus_cnt,
+	        truck_cnt,
+	        image,
+	        ocrn_dt
+	    ) VALUES (
+	        #{eqpmn_id},
+	        #{person_cnt},
+	        #{bicycle_cnt},
+	        #{car_cnt},
+	        #{motorbike_cnt},
+	        #{bus_cnt},
+	        #{truck_cnt},
+	        #{image},
+	        #{ocrn_dt} :: timestamp
+	    )
+    </insert>
+	<!--
+        작성자 : 이세현
+        작성일 : 2024.01.15
+        내용 : 현장 - 장애처리 SQL
+    -->
+    <insert id="equipmentErrorInsert" parameterType="HashMap">
+        INSERT INTO trobl_ocrn_info (
+            eqpmn_id,
+            ocrn_dt,
+            eqpmn_trobl_cd,
+            recovery_yn
+        ) VALUES (
+            #{eqpmn_id},
+            #{timestamp} :: timestamp,
+            #{eqpmn_trobl_cd},
+            'N'
+        )
+    </insert>
+
+	<!--
+        작성자 : 이세현
+        작성일 : 2024.01.15
+        내용 : 현장 - 장애처리 복구여부 'Y' 업데이트 SQL
+    -->
+    <update id="equipmentRecovery" parameterType="HashMap">
+        UPDATE
+            trobl_ocrn_info
+        SET
+            recovery_yn = 'Y',
+            recovery_dt = #{timestamp} :: timestamp
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd = #{eqpmn_trobl_cd}
+        AND
+            recovery_yn = 'N'
+    </update>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.15
+        내용 : 현장 - 해당 장비의 연결 오류 이외의 전체 장애 복구여부 'Y' 업데이트 SQL
+    -->
+    <update id="equipmentAllRecovery" parameterType="HashMap">
+        UPDATE
+            trobl_ocrn_info
+        SET
+            recovery_yn = 'Y',
+            recovery_dt = #{timestamp} :: timestamp
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd NOT IN ('ERR-CONNECTION')
+        AND
+            recovery_yn = 'N'
+    </update>
+	<!--
+		작성자 : 이세현
+		작성일 : 2024.01.15
+		내용 : 장비 목록 조회 SQL
+ 	-->
+	<select id="equipmentList" resultType="HashMap">
+   		SELECT
+            eqpmn_id,
+            eqpmn_nm,
+            eqpmn_lat,
+            eqpmn_lon,
+            camera_ip,
+            camera_nm,
+            cntn_id,
+            cntn_pw,
+            reg_dt,
+            rgtr_id,
+            mdfcn_dt,
+            mdfr_id,
+            use_yn
+        FROM
+            eqpmn_reg_info
+        WHERE
+            use_yn = 'Y'
+    </select>
+
+	<!--
+       작성자 : 이세현
+       작성일 : 2024.01.17
+       내용 : 장애 미복구 장비 목록 조회 SQL
+    -->
+	<select id="errorUnrecoveredSelectList" parameterType="HashMap" resultType="HashMap">
+        SELECT
+            eqpmn_trobl_cd
+	    FROM
+	        trobl_ocrn_info
+	    WHERE
+	        eqpmn_id = #{eqpmn_id}
+	    AND
+	        recovery_yn = 'N'
+	    AND
+	        eqpmn_trobl_cd NOT IN ('ERR-CONNECTION')
+    </select>
+
+	<!--
+       작성자 : 이세현
+       작성일 : 2024.01.17
+       내용 : 현장 장비 30초전 데이터 존재 여부 확인 SQL
+    -->
+	<select id="thirtySecondsAgoCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*) as count
+        FROM
+            spt_eqpmn_data
+        WHERE
+        	eqpmn_id = #{eqpmn_id}
+        AND
+            clct_dt >= #{now}::TIMESTAMP - INTERVAL '50' SECOND
+    </select>
+
+	<!--
+        작성자 : 이세현
+        작성일 : 2024.01.17
+        내용 :  통신연결오류 존재 여부 확인 SQL
+     -->
+	<select id="connectionErrorSelect" parameterType="HashMap" resultType="HashMap">
+        SELECT
+            eqpmn_trobl_cd
+            , ocrn_dt
+            , eqpmn_id
+            , recovery_yn
+            , recovery_dt
+	    FROM
+	        trobl_ocrn_info
+	    WHERE
+	        eqpmn_trobl_cd = 'ERR-CONNECTION'
+        AND
+        	eqpmn_id = #{eqpmn_id}
+        AND
+            recovery_yn = 'N'
+    </select>
+
+	<!--
+		작성자 : 이세현
+		작성일 : 2024.01.17
+		내용 :  통신연결오류 복구 SQL
+ 	-->
+    <update id="connectionErrorUpdateRecoveryToY" parameterType="HashMap">
+        UPDATE
+            trobl_ocrn_info
+        SET
+            recovery_yn = 'Y',
+            recovery_dt = CURRENT_TIMESTAMP
+        WHERE
+        	eqpmn_id  #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd = #{eqpmn_trobl_cd}
+        AND
+            ocrn_dt = #{ocrn_dt}
+    </update>
+
+	<!--
+		작성자 : 이세현
+		작성일 : 2024.01.17
+		내용 :  통신연결오류 등록 SQL
+ 	-->
+    <insert id="connectionErrorInsert" parameterType="HashMap">
+        INSERT INTO trobl_ocrn_info (
+            eqpmn_id,
+            ocrn_dt,
+            eqpmn_trobl_cd,
+            recovery_yn
+        ) VALUES (
+            #{eqpmn_id},
+            CURRENT_TIMESTAMP - INTERVAL '50' SECOND,
+            'ERR-CONNECTION',
+            'N'
+        )
+    </insert>
+
+    <!-- **************************************** 분석용 데이터 1시간 **************************************** -->
+
+    <!--
+         작성자 : 이세현
+         작성일 : 2024.01.23
+         내용 : 현장 실시간 데이터(1시간) 총 보행자 수 조회 SQL
+    -->
+    <select id="oneHourPedestrianCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(person_cnt), 0) as person_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 현장 실시간 데이터(1시간) 총 자전거 수 조회 SQL
+    -->
+    <select id="oneHourBicycleCount" parameterType="HashMap" resultType="int">
+        SELECT
+             COALESCE(SUM(bicycle_cnt), 0) AS bicycle_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 현장 실시간 데이터(1시간) 총 승용차 수 조회 SQL
+    -->
+    <select id="oneHourCarCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(car_cnt), 0) AS car_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 현장 실시간 데이터(1시간) 총 오토바이 수 조회 SQL
+    -->
+    <select id="oneHourMotorcycleCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(motorcycle_cnt), 0) AS motorcycle_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 현장 실시간 데이터(1시간) 총 버스 수 조회 SQL
+    -->
+    <select id="oneHourBusCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(bus_cnt), 0) AS bus_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 현장 실시간 데이터(1시간) 총 트럭 수 조회 SQL
+    -->
+    <select id="oneHourTruckCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(truck_cnt), 0) AS truck_cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+         작성자 : 이세현
+         작성일 : 2024.01.23
+         내용 : 모든 장비장애 데이터(1시간) 건수 조회 SQL
+    -->
+    <select id="oneHourAllErrorCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*)
+        FROM
+            trobl_ocrn_info
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 연결장애 데이터(1시간) 건수 조회 SQL
+    -->
+    <select id="oneHourConnectionErrorCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*)
+        FROM
+            trobl_ocrn_info
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd = 'ERR-CONNECTION'
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : CPU 사용량 장애 데이터(1시간) 건수 조회 SQL
+    -->
+    <select id="oneHourCpuUsageErrorCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*)
+        FROM
+            trobl_ocrn_info
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd = 'ERR-CPU-USAGE'
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2024.01.23
+        내용 : 메모리 사용량 장애 데이터(1시간) 건수 조회 SQL
+    -->
+    <select id="oneHourMemoryUsageErrorCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COUNT(*) AS count
+        FROM
+            trobl_ocrn_info
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            eqpmn_trobl_cd = 'ERR-MEM-USAGE'
+        AND
+            ocrn_dt &gt;= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 분석용 데이터(1시간) 등록 SQL
+    -->
+    <insert id="oneHourAnalysisDataInsert" parameterType="HashMap">
+        INSERT INTO anals_event_data_hr(
+	        eqpmn_id
+	        , clct_dt
+	        , person_cnt
+	        , bicycle_cnt
+	        , car_cnt
+	        , motorcycle_cnt
+	        , bus_cnt
+	        , truck_cnt
+	    ) VALUES (
+	        #{eqpmn_id}
+	        , #{clct_dt} :: TIMESTAMP
+	        , #{person_cnt}
+	        , #{bicycle_cnt}
+	        , #{car_cnt}
+	        , #{motorcycle_cnt}
+	        , #{bus_cnt}
+	        , #{truck_cnt}
+        );
+    </insert>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 현장 실시간 데이터(1시간) 객체별 총 갯수 등록 SQL
+    -->
+    <select id="oneHourVehicleCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(
+                CASE #{vehicleType}
+                    WHEN 'PERSON' THEN person_cnt
+                    WHEN 'BICYCLE' THEN bicycle_cnt
+                    WHEN 'CAR' THEN car_cnt
+                    WHEN 'MOTORCYCLE' THEN motorcycle_cnt
+                    WHEN 'BUS' THEN bus_cnt
+                    WHEN 'TRUCK' THEN truck_cnt
+                END
+            ), 0) AS cnt
+        FROM
+            object_detect_event
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            ocrn_dt >= #{dateTime}::TIMESTAMP
+        AND
+            ocrn_dt &lt; #{dateTime}::TIMESTAMP + INTERVAL '1' HOUR
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 현장 실시간 데이터(하루) 객체별 총 갯수 등록 SQL
+    -->
+    <select id="oneDayVehicleCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(
+                CASE #{vehicleType}
+                    WHEN 'PERSON' THEN person_cnt
+                    WHEN 'BICYCLE' THEN bicycle_cnt
+                    WHEN 'CAR' THEN car_cnt
+                    WHEN 'MOTORCYCLE' THEN motorcycle_cnt
+                    WHEN 'BUS' THEN bus_cnt
+                    WHEN 'TRUCK' THEN truck_cnt
+                END
+            ), 0) AS cnt
+        FROM
+            anals_event_data_hr
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            clct_dt >= #{date}::DATE
+        AND
+            clct_dt &lt; #{date}::DATE + INTERVAL '1' DAY
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 분석용 데이터(하루) 등록 SQL
+    -->
+    <insert id="oneDayAnalysisDataInsert" parameterType="HashMap">
+        INSERT INTO anals_event_data_dd(
+	        eqpmn_id
+	        , clct_dt
+	        , person_cnt
+	        , bicycle_cnt
+	        , car_cnt
+	        , motorcycle_cnt
+	        , bus_cnt
+	        , truck_cnt
+	    ) VALUES (
+	        #{eqpmn_id}
+	        , #{clct_dt} :: DATE
+	        , #{person_cnt}
+	        , #{bicycle_cnt}
+	        , #{car_cnt}
+	        , #{motorcycle_cnt}
+	        , #{bus_cnt}
+	        , #{truck_cnt}
+        );
+    </insert>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 현장 실시간 데이터(한달) 객체별 총 갯수 조회 SQL
+    -->
+    <select id="monthlyVehicleCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(
+                CASE #{vehicleType}
+                    WHEN 'PERSON' THEN person_cnt
+                    WHEN 'BICYCLE' THEN bicycle_cnt
+                    WHEN 'CAR' THEN car_cnt
+                    WHEN 'MOTORCYCLE' THEN motorcycle_cnt
+                    WHEN 'BUS' THEN bus_cnt
+                    WHEN 'TRUCK' THEN truck_cnt
+                END
+            ), 0) AS cnt
+        FROM
+            anals_event_data_dd
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            DATE_TRUNC('month', clct_dt::DATE) = DATE_TRUNC('month', (#{month} || '-01')::DATE)
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 분석용 데이터(한달) 등록 SQL
+    -->
+    <insert id="monthlyAnalysisDataInsert" parameterType="HashMap">
+        INSERT INTO anals_event_data_mm(
+	        eqpmn_id
+	        , clct_dt
+	        , person_cnt
+	        , bicycle_cnt
+	        , car_cnt
+	        , motorcycle_cnt
+	        , bus_cnt
+	        , truck_cnt
+	    ) VALUES (
+	        #{eqpmn_id}
+	         , (#{clct_dt} || '-01') :: DATE
+	        , #{person_cnt}
+	        , #{bicycle_cnt}
+	        , #{car_cnt}
+	        , #{motorcycle_cnt}
+	        , #{bus_cnt}
+	        , #{truck_cnt}
+        );
+    </insert>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 현장 실시간 데이터(1년) 객체별 총 갯수 조회 SQL
+    -->
+    <select id="yearlyVehicleCount" parameterType="HashMap" resultType="int">
+        SELECT
+            COALESCE(SUM(
+                CASE #{vehicleType}
+                    WHEN 'PERSON' THEN person_cnt
+                    WHEN 'BICYCLE' THEN bicycle_cnt
+                    WHEN 'CAR' THEN car_cnt
+                    WHEN 'MOTORCYCLE' THEN motorcycle_cnt
+                    WHEN 'BUS' THEN bus_cnt
+                    WHEN 'TRUCK' THEN truck_cnt
+                END
+            ), 0) AS cnt
+        FROM
+            anals_event_data_mm
+        WHERE
+            eqpmn_id = #{eqpmn_id}
+        AND
+            EXTRACT(YEAR FROM clct_dt) = #{year}
+    </select>
+
+    <!--
+        작성자 : 이세현
+        작성일 : 2023.01.23
+        내용 : 분석용 데이터(1년) 등록 SQL
+    -->
+    <insert id="yearlyAnalysisDataInsert" parameterType="HashMap">
+    INSERT INTO anals_event_data_yr(
+        eqpmn_id
+        , clct_dt
+        , person_cnt
+        , bicycle_cnt
+        , car_cnt
+        , motorcycle_cnt
+        , bus_cnt
+        , truck_cnt
+    ) VALUES (
+        #{eqpmn_id}
+        , (#{clct_dt} || '-01-01') :: DATE
+        , #{person_cnt}
+        , #{bicycle_cnt}
+        , #{car_cnt}
+        , #{motorcycle_cnt}
+        , #{bus_cnt}
+        , #{truck_cnt}
+    );
+</insert>
+</mapper>
